@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"io"
 	"log"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -55,7 +56,16 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 			log.Printf("Error closing file: %v\n", err)
 		}
 	}(file)
-	mediaType := header.Header.Get("Content-Type")
+	mType := header.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(mType)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid file type", err)
+		return
+	}
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid file type", err)
+		return
+	}
 
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
@@ -66,12 +76,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "You are not authorized to upload this video", err)
 		return
 	}
-	mediaType, ok := strings.CutPrefix(mediaType, "image/")
+	mediaSubtype, ok := strings.CutPrefix(mediaType, "image/")
 	if !ok {
 		respondWithError(w, http.StatusBadRequest, "Invalid file type", err)
 		return
 	}
-	newVideoPath := filepath.Join(cfg.assetsRoot, fmt.Sprintf("%s.%v", videoID, mediaType))
+	newVideoPath := filepath.Join(cfg.assetsRoot, fmt.Sprintf("%s.%v", videoID, mediaSubtype))
 	newVideoFile, err := os.Create(newVideoPath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create file", err)
@@ -83,7 +93,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "Couldn't copy file", err)
 		return
 	}
-	dataURL := fmt.Sprintf("http://localhost:%v/assets/%v.%v", cfg.port, videoID, mediaType)
+	dataURL := fmt.Sprintf("http://localhost:%v/assets/%v.%v", cfg.port, videoID, mediaSubtype)
 
 	err = cfg.db.UpdateVideo(database.Video{
 		ID:           videoID,
