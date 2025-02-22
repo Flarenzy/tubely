@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
@@ -81,7 +83,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "Invalid file type", err)
 		return
 	}
-	newVideoPath := filepath.Join(cfg.assetsRoot, fmt.Sprintf("%s.%v", videoID, mediaSubtype))
+	randomBuf := make([]byte, 32)
+	_, err = rand.Read(randomBuf)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't generate random string", err)
+		return
+	}
+	randomVideoId := base64.RawURLEncoding.EncodeToString(randomBuf)
+	newVideoPath := filepath.Join(cfg.assetsRoot, fmt.Sprintf("%s.%v", randomVideoId, mediaSubtype))
 	newVideoFile, err := os.Create(newVideoPath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create file", err)
@@ -93,7 +102,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "Couldn't copy file", err)
 		return
 	}
-	dataURL := fmt.Sprintf("http://localhost:%v/assets/%v.%v", cfg.port, videoID, mediaSubtype)
+	dataURL := fmt.Sprintf("http://localhost:%v/assets/%v.%v", cfg.port, randomVideoId, mediaSubtype)
 
 	err = cfg.db.UpdateVideo(database.Video{
 		ID:           videoID,
