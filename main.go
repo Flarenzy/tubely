@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +25,7 @@ type apiConfig struct {
 	s3Region         string
 	s3CfDistribution string
 	port             string
+	s3Client         *s3.Client
 }
 
 type thumbnail struct {
@@ -83,7 +87,11 @@ func main() {
 	if port == "" {
 		log.Fatal("PORT environment variable is not set")
 	}
-
+	s3Config, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		log.Fatalf("Couldn't load SDK config: %v", err)
+	}
+	s3Client := s3.NewFromConfig(s3Config)
 	cfg := apiConfig{
 		db:               db,
 		jwtSecret:        jwtSecret,
@@ -94,6 +102,7 @@ func main() {
 		s3Region:         s3Region,
 		s3CfDistribution: s3CfDistribution,
 		port:             port,
+		s3Client:         s3Client,
 	}
 
 	err = cfg.ensureAssetsDir()
@@ -129,5 +138,12 @@ func main() {
 	}
 
 	log.Printf("Serving on: http://localhost:%s/app/\n", port)
+	lstOutputs, err := cfg.s3Client.ListBuckets(context.Background(), &s3.ListBucketsInput{})
+	if err != nil {
+		log.Fatalf("Couldn't list buckets: %v", err)
+	}
+	for _, bucket := range lstOutputs.Buckets {
+		log.Printf("Bucket: %s", *bucket.Name)
+	}
 	log.Fatal(srv.ListenAndServe())
 }
